@@ -1,0 +1,239 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuários
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  lastLogin     DateTime?
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relacionamentos
+  createdProducts    Product[]    @relation("ProductCreator")
+  updatedProducts    Product[]    @relation("ProductUpdater")
+  stockMovements     StockMovement[]
+  createdCategories  Category[]   @relation("CategoryCreator")
+  updatedCategories  Category[]   @relation("CategoryUpdater")
+  createdSuppliers   Supplier[]   @relation("SupplierCreator")
+  updatedSuppliers   Supplier[]   @relation("SupplierUpdater")
+
+  @@map("users")
+}
+
+// Modelo de Categorias
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  color       String?   @default("#3B82F6")
+  icon        String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relacionamentos
+  createdBy   User      @relation("CategoryCreator", fields: [createdById], references: [id])
+  createdById String
+  updatedBy   User      @relation("CategoryUpdater", fields: [updatedById], references: [id])
+  updatedById String
+  products    Product[]
+
+  @@map("categories")
+}
+
+// Modelo de Fornecedores
+model Supplier {
+  id          String    @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  cnpj        String?   @unique
+  contactName String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relacionamentos
+  createdBy   User      @relation("SupplierCreator", fields: [createdById], references: [id])
+  createdById String
+  updatedBy   User      @relation("SupplierUpdater", fields: [updatedById], references: [id])
+  updatedById String
+  products    Product[]
+  purchases   Purchase[]
+
+  @@map("suppliers")
+}
+
+// Modelo de Produtos
+model Product {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  sku             String    @unique
+  barcode        String?   @unique
+  qrCode         String?   @unique
+  categoryId      String
+  supplierId      String?
+  costPrice       Decimal   @db.Decimal(10, 2)
+  sellingPrice    Decimal   @db.Decimal(10, 2)
+  minStock        Int       @default(0)
+  maxStock        Int?
+  currentStock    Int       @default(0)
+  unit            String    @default("UN")
+  weight          Decimal?  @db.Decimal(8, 3)
+  dimensions      String?
+  image          String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relacionamentos
+  category        Category      @relation(fields: [categoryId], references: [id])
+  supplier        Supplier?     @relation(fields: [supplierId], references: [id])
+  createdBy       User          @relation("ProductCreator", fields: [createdById], references: [id])
+  createdById     String
+  updatedBy       User          @relation("ProductUpdater", fields: [updatedById], references: [id])
+  updatedById     String
+  stockMovements  StockMovement[]
+  purchaseItems   PurchaseItem[]
+  saleItems       SaleItem[]
+
+  @@map("products")
+}
+
+// Modelo de Movimentações de Estoque
+model StockMovement {
+  id          String           @id @default(cuid())
+  productId   String
+  type        MovementType
+  quantity    Int
+  previousStock Int
+  newStock    Int
+  reason      String?
+  reference   String?
+  notes       String?
+  createdAt   DateTime         @default(now())
+
+  // Relacionamentos
+  product     Product          @relation(fields: [productId], references: [id])
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+
+  @@map("stock_movements")
+}
+
+// Modelo de Compras
+model Purchase {
+  id          String    @id @default(cuid())
+  supplierId  String
+  purchaseDate DateTime @default(now())
+  totalAmount Decimal   @db.Decimal(10, 2)
+  status      PurchaseStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relacionamentos
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  items       PurchaseItem[]
+
+  @@map("purchases")
+}
+
+// Modelo de Itens de Compra
+model PurchaseItem {
+  id          String    @id @default(cuid())
+  purchaseId  String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  totalPrice  Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+
+  // Relacionamentos
+  purchase    Purchase      @relation(fields: [purchaseId], references: [id])
+  product     Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_items")
+}
+
+// Modelo de Vendas
+model Sale {
+  id          String    @id @default(cuid())
+  customerName String
+  customerEmail String?
+  customerPhone String?
+  saleDate    DateTime  @default(now())
+  totalAmount Decimal   @db.Decimal(10, 2)
+  status      SaleStatus @default(COMPLETED)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relacionamentos
+  items       SaleItem[]
+
+  @@map("sales")
+}
+
+// Modelo de Itens de Venda
+model SaleItem {
+  id          String    @id @default(cuid())
+  saleId      String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  totalPrice  Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+
+  // Relacionamentos
+  sale        Sale         @relation(fields: [saleId], references: [id])
+  product     Product      @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+  VIEWER
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  TRANSFER
+}
+
+enum PurchaseStatus {
+  PENDING
+  APPROVED
+  RECEIVED
+  CANCELLED
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}

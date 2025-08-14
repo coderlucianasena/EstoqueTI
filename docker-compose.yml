@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: estoque_ti_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: estoque_ti
+      POSTGRES_USER: estoque_user
+      POSTGRES_PASSWORD: estoque_pass_2024
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - estoque_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U estoque_user -d estoque_ti"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis para cache e sessões
+  redis:
+    image: redis:7-alpine
+    container_name: estoque_ti_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_pass_2024
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - estoque_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend Node.js
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: estoque_ti_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://estoque_user:estoque_pass_2024@postgres:5432/estoque_ti?schema=public
+      REDIS_URL: redis://:redis_pass_2024@redis:6379
+      JWT_SECRET: ${JWT_SECRET:-sua-chave-secreta-muito-segura-aqui-mude-em-producao}
+      CORS_ORIGIN: http://localhost:3000
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - estoque_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: estoque_ti_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+      VITE_APP_NAME: EstoqueTI
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - estoque_network
+
+  # Nginx como proxy reverso
+  nginx:
+    image: nginx:alpine
+    container_name: estoque_ti_nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - estoque_network
+
+  # Adminer para gerenciar o banco (opcional)
+  adminer:
+    image: adminer:latest
+    container_name: estoque_ti_adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha-dark
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - estoque_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  estoque_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
