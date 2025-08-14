@@ -61,6 +61,8 @@ EstoqueTI/
 │   │   ├── stores/          # Gerenciamento de estado
 │   │   ├── types/           # Tipos TypeScript
 │   │   └── utils/           # Utilitários
+│   │   └── App.tsx          # Componente principal
+│   │   └── main.tsx         # Ponto de entrada
 │   └── package.json
 ├── docker/                  # Configurações Docker
 ├── docs/                    # Documentação
